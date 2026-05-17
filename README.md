@@ -196,3 +196,79 @@ cd services/audit && npm test
 ## Variables de entorno
 
 Ver `.env.example` en la raíz para la lista completa documentada.
+
+## Puntos diferenciadores
+
+Esta entrega cumple con 3 de los 4 puntos diferenciadores solicitados.
+
+### 1. Busqueda de texto sobre ordenes con PostgreSQL y endpoint `GET /orders/search?q=texto`
+
+**Cumple:** Si
+
+**Como esta implementado:**
+
+- Se usa `pg_trgm` en PostgreSQL.
+- El microservicio crea la extension y los indices GIN al arrancar.
+- El endpoint disponible es `GET /orders/search?q=texto`.
+
+**Como validarlo:**
+
+1. Levanta el proyecto con `docker compose up --build`.
+2. Crea una orden con `notes` o productos que luego puedas buscar.
+3. Ejecuta:
+
+```bash
+curl "http://localhost:3000/orders/search?q=cafetera" \
+  -H "x-api-key: local-dev-key"
+```
+
+4. Verifica que el endpoint responda `200 OK` y retorne las ordenes coincidentes.
+
+### 2. Al menos un test de integracion o e2e con Jest para el flujo principal de creacion de orden
+
+**Cumple:** Si
+
+**Como esta implementado:**
+
+- Existe un test de integracion del controlador de ordenes que cubre `POST /orders` con payload valido y respuesta `201 Created`.
+
+**Como validarlo:**
+
+1. Entra al microservicio de ordenes.
+2. Ejecuta:
+
+```bash
+cd services/orders && npm test -- --runInBand
+```
+
+3. Verifica que pase el archivo de pruebas de integracion de orders.
+
+### 3. Guard de autenticacion basico en el microservicio de ordenes
+
+**Cumple:** Si
+
+**Como esta implementado:**
+
+- Se usa autenticacion por API Key.
+- Todos los endpoints del microservicio de ordenes requieren el header `x-api-key`.
+
+**Como validarlo:**
+
+1. Llama cualquier endpoint sin `x-api-key`.
+2. Verifica que responda `401 Unauthorized`.
+3. Repite la llamada con `x-api-key: local-dev-key` y verifica que la respuesta sea exitosa.
+
+Ejemplo:
+
+```bash
+curl http://localhost:3000/catalog/products
+```
+
+Debe responder `401`.
+
+```bash
+curl http://localhost:3000/catalog/products \
+  -H "x-api-key: local-dev-key"
+```
+
+Debe responder `200 OK` con el catalogo mock.
