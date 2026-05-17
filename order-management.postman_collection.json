@@ -1,0 +1,823 @@
+{
+  "info": {
+    "_postman_id": "4d0f0d0f-6e5f-4b8d-bc0e-6f1d9a6a2026",
+    "name": "Order Management - Exhaustive Validation",
+    "description": "Coleccion exhaustiva para validar el mini sistema de gestion de ordenes.\n\nOrden sugerido de ejecucion:\n1. Catalog\n2. Orders - Create\n3. Orders - Read, List and Search\n4. Orders - Status Updates\n5. Audit\n\nLa coleccion usa variables de coleccion para encadenar ids de orden creados durante la ejecucion.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "ordersBaseUrl", "value": "http://localhost:3000" },
+    { "key": "auditBaseUrl", "value": "http://localhost:3001" },
+    { "key": "apiKey", "value": "local-dev-key" },
+    { "key": "searchNote", "value": "postman-smoke-note" },
+    { "key": "missingOrderId", "value": "11111111-1111-1111-1111-111111111111" },
+    { "key": "catalogActiveSku", "value": "SKU-1234" },
+    { "key": "catalogSecondSku", "value": "SKU-5678" },
+    { "key": "catalogNoStockSku", "value": "SKU-4040" },
+    { "key": "catalogInactiveSku", "value": "SKU-0000" },
+    { "key": "createdOrderId", "value": "" },
+    { "key": "createdOrderNumber", "value": "" },
+    { "key": "transitionOrderId", "value": "" },
+    { "key": "cancelOrderId", "value": "" },
+    { "key": "failedOrderId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 - Catalog",
+      "item": [
+        {
+          "name": "GET /catalog/products - success",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{ordersBaseUrl}}/catalog/products",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["catalog", "products"]
+            },
+            "description": "Obtiene el catalogo mock disponible desde la API."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('retorna array de productos', function () { pm.expect(Array.isArray(body)).to.eql(true); pm.expect(body.length).to.be.above(0); });",
+                  "const active = body.find(product => product.active && product.availableStock > 0);",
+                  "const second = body.find(product => product.productId !== active.productId && product.active && product.availableStock > 0);",
+                  "const noStock = body.find(product => product.availableStock === 0);",
+                  "const inactive = body.find(product => product.active === false);",
+                  "if (active) { pm.collectionVariables.set('catalogActiveSku', active.productId); }",
+                  "if (second) { pm.collectionVariables.set('catalogSecondSku', second.productId); }",
+                  "if (noStock) { pm.collectionVariables.set('catalogNoStockSku', noStock.productId); }",
+                  "if (inactive) { pm.collectionVariables.set('catalogInactiveSku', inactive.productId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /catalog/products - missing API key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ordersBaseUrl}}/catalog/products",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["catalog", "products"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('mensaje de API key requerida', function () { pm.expect(pm.response.json().message).to.eql('API key is required'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /catalog/products - invalid API key",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "wrong-key-123" }
+            ],
+            "url": {
+              "raw": "{{ordersBaseUrl}}/catalog/products",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["catalog", "products"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('mensaje de API key invalida', function () { pm.expect(pm.response.json().message).to.eql('Invalid API key'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Orders - Create",
+      "item": [
+        {
+          "name": "POST /orders - create valid order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"notes\": \"{{searchNote}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 2\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test('orden creada en PENDING', function () { pm.expect(body.status).to.eql('PENDING'); pm.expect(body.items.length).to.eql(1); });",
+                  "pm.collectionVariables.set('createdOrderId', body.id);",
+                  "pm.collectionVariables.set('createdOrderNumber', body.orderNumber);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /orders - create valid multi item order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-99\",\n  \"notes\": \"multi-item-postman\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 1\n    },\n    {\n      \"productId\": \"{{catalogSecondSku}}\",\n      \"quantity\": 2\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test('snapshot de 2 items', function () { pm.expect(body.items.length).to.eql(2); pm.expect(Number(body.totalAmount)).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /orders - create order for transitions",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"transition-user\",\n  \"notes\": \"transition-order\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set('transitionOrderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /orders - create order for cancellation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"cancel-user\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogSecondSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set('cancelOrderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /orders - create order for failure",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"failed-user\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogSecondSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set('failedOrderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /orders - missing API key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 401', function () { pm.response.to.have.status(401); });","pm.expect(pm.response.json().message).to.eql('API key is required');"]}}]
+        },
+        {
+          "name": "POST /orders - invalid API key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "bad-key-0000" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 401', function () { pm.response.to.have.status(401); });","pm.expect(pm.response.json().message).to.eql('Invalid API key');"]}}]
+        },
+        {
+          "name": "POST /orders - missing userId",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.test('mensaje de validacion de userId', function () { const msg = pm.response.json().message; pm.expect(JSON.stringify(msg)).to.include('userId'); });"]}}]
+        },
+        {
+          "name": "POST /orders - missing items",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.test('mensaje de validacion de items', function () { const msg = pm.response.json().message; pm.expect(JSON.stringify(msg)).to.include('items'); });"]}}]
+        },
+        {
+          "name": "POST /orders - empty items array",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.test('array minimo 1 item', function () { pm.expect(JSON.stringify(pm.response.json().message)).to.include('at least 1'); });"]}}]
+        },
+        {
+          "name": "POST /orders - quantity zero",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 0\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.test('mensaje de quantity minima', function () { pm.expect(JSON.stringify(pm.response.json().message)).to.include('quantity'); });"]}}]
+        },
+        {
+          "name": "POST /orders - malformed JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"userId\": \"user-42\", \"items\": [ { \"productId\": \"{{catalogActiveSku}}\", \"quantity\": 1 }",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });"]}}]
+        },
+        {
+          "name": "POST /orders - unknown product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"SKU-DOES-NOT-EXIST\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.expect(pm.response.json().message).to.include('does not exist in catalog');"]}}]
+        },
+        {
+          "name": "POST /orders - inactive product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogInactiveSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.expect(pm.response.json().message).to.include('not available for ordering');"]}}]
+        },
+        {
+          "name": "POST /orders - no stock product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogNoStockSku}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.expect(pm.response.json().message).to.include('Insufficient stock');"]}}]
+        },
+        {
+          "name": "POST /orders - quantity exceeds stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"user-42\",\n  \"items\": [\n    {\n      \"productId\": \"{{catalogActiveSku}}\",\n      \"quantity\": 999\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{ordersBaseUrl}}/orders",
+              "host": ["{{ordersBaseUrl}}"],
+              "path": ["orders"]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.expect(pm.response.json().message).to.include('Insufficient stock');"]}}]
+        }
+      ]
+    },
+    {
+      "name": "03 - Orders - Read, List and Search",
+      "item": [
+        {
+          "name": "GET /orders - list success",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders", "host": ["{{ordersBaseUrl}}"], "path": ["orders"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('estructura paginada', function () { pm.expect(body).to.have.property('data'); pm.expect(body).to.have.property('page'); pm.expect(body).to.have.property('limit'); pm.expect(body).to.have.property('total'); });"]}}]
+        },
+        {
+          "name": "GET /orders - filter by status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders?status=PENDING", "host": ["{{ordersBaseUrl}}"], "path": ["orders"], "query": [{ "key": "status", "value": "PENDING" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('si hay resultados, todos son PENDING', function () { if (body.data.length) { body.data.forEach(order => pm.expect(order.status).to.eql('PENDING')); } else { pm.expect(body.data.length).to.eql(0); } });"]}}]
+        },
+        {
+          "name": "GET /orders - filter by userId",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders?userId=user-42", "host": ["{{ordersBaseUrl}}"], "path": ["orders"], "query": [{ "key": "userId", "value": "user-42" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });"]}}]
+        },
+        {
+          "name": "GET /orders - pagination limit 1",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders?page=1&limit=1", "host": ["{{ordersBaseUrl}}"], "path": ["orders"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "1" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('limit aplicado', function () { pm.expect(body.limit).to.eql(1); pm.expect(body.data.length).to.be.at.most(1); });"]}}]
+        },
+        {
+          "name": "GET /orders - invalid status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders?status=INVALIDO", "host": ["{{ordersBaseUrl}}"], "path": ["orders"], "query": [{ "key": "status", "value": "INVALIDO" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.test('mensaje enum status', function () { pm.expect(JSON.stringify(pm.response.json().message)).to.include('status must be one of'); });"]}}]
+        },
+        {
+          "name": "GET /orders - invalid page",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders?page=0", "host": ["{{ordersBaseUrl}}"], "path": ["orders"], "query": [{ "key": "page", "value": "0" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });"]}}]
+        },
+        {
+          "name": "GET /orders - invalid limit",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders?limit=0", "host": ["{{ordersBaseUrl}}"], "path": ["orders"], "query": [{ "key": "limit", "value": "0" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });"]}}]
+        },
+        {
+          "name": "GET /orders - missing API key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{ordersBaseUrl}}/orders", "host": ["{{ordersBaseUrl}}"], "path": ["orders"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 401', function () { pm.response.to.have.status(401); });"]}}]
+        },
+        {
+          "name": "GET /orders/:id - success",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{createdOrderId}}", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{createdOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('id corresponde a la orden creada', function () { pm.expect(body.id).to.eql(pm.collectionVariables.get('createdOrderId')); });"]}}]
+        },
+        {
+          "name": "GET /orders/:id - not found",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{missingOrderId}}", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{missingOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 404', function () { pm.response.to.have.status(404); });","pm.expect(pm.response.json().message).to.include('not found');"]}}]
+        },
+        {
+          "name": "GET /orders/:id - missing API key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{createdOrderId}}", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{createdOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 401', function () { pm.response.to.have.status(401); });"]}}]
+        },
+        {
+          "name": "GET /orders/search - success by note",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/search?q={{searchNote}}", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "search"], "query": [{ "key": "q", "value": "{{searchNote}}" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('retorna array y contiene la orden creada', function () { pm.expect(Array.isArray(body)).to.eql(true); pm.expect(body.some(order => order.id === pm.collectionVariables.get('createdOrderId'))).to.eql(true); });"]}}]
+        },
+        {
+          "name": "GET /orders/search - success by order number",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/search?q={{createdOrderNumber}}", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "search"], "query": [{ "key": "q", "value": "{{createdOrderNumber}}" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('encuentra por orderNumber', function () { pm.expect(body.some(order => order.orderNumber === pm.collectionVariables.get('createdOrderNumber'))).to.eql(true); });"]}}]
+        },
+        {
+          "name": "GET /orders/search - no results",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/search?q=zzzz-no-match", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "search"], "query": [{ "key": "q", "value": "zzzz-no-match" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('retorna array vacio o sin coincidencias', function () { pm.expect(Array.isArray(body)).to.eql(true); });"]}}]
+        },
+        {
+          "name": "GET /orders/search - query too short",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/search?q=ab", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "search"], "query": [{ "key": "q", "value": "ab" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.expect(JSON.stringify(pm.response.json().message)).to.include('at least 3 characters');"]}}]
+        },
+        {
+          "name": "GET /orders/search - missing API key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{ordersBaseUrl}}/orders/search?q=coffee", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "search"], "query": [{ "key": "q", "value": "coffee" }] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 401', function () { pm.response.to.have.status(401); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "04 - Orders - Status Updates",
+      "item": [
+        {
+          "name": "PUT /orders/:id/status - PENDING to CONFIRMED",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"metadata\": {\n    \"actor\": \"postman-collection\",\n    \"reason\": \"confirm order\"\n  }\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{transitionOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{transitionOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","pm.expect(pm.response.json().status).to.eql('CONFIRMED');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - CONFIRMED to PROCESSING",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"PROCESSING\",\n  \"metadata\": {\n    \"actor\": \"postman-collection\"\n  }\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{transitionOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{transitionOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","pm.expect(pm.response.json().status).to.eql('PROCESSING');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - PROCESSING to SHIPPED",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"SHIPPED\",\n  \"metadata\": {\n    \"actor\": \"postman-collection\"\n  }\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{transitionOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{transitionOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","pm.expect(pm.response.json().status).to.eql('SHIPPED');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - SHIPPED to DELIVERED",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"DELIVERED\",\n  \"metadata\": {\n    \"actor\": \"postman-collection\"\n  }\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{transitionOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{transitionOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","pm.expect(pm.response.json().status).to.eql('DELIVERED');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - terminal transition rejected",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"PENDING\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{transitionOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{transitionOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });","pm.expect(pm.response.json().message).to.include('Invalid transition');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - PENDING to CANCELLED",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CANCELLED\",\n  \"metadata\": {\n    \"actor\": \"postman-collection\",\n    \"reason\": \"customer request\"\n  }\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{cancelOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{cancelOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","pm.expect(pm.response.json().status).to.eql('CANCELLED');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - PENDING to FAILED",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"FAILED\",\n  \"metadata\": {\n    \"actor\": \"postman-collection\",\n    \"reason\": \"manual failure\"\n  }\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{failedOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{failedOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","pm.expect(pm.response.json().status).to.eql('FAILED');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - invalid enum",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"UNKNOWN\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{createdOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{createdOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 400', function () { pm.response.to.have.status(400); });"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - not found",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{missingOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{missingOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 404', function () { pm.response.to.have.status(404); });","pm.expect(pm.response.json().message).to.include('not found');"]}}]
+        },
+        {
+          "name": "PUT /orders/:id/status - missing API key",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"CONFIRMED\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{ordersBaseUrl}}/orders/{{createdOrderId}}/status", "host": ["{{ordersBaseUrl}}"], "path": ["orders", "{{createdOrderId}}", "status"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 401', function () { pm.response.to.have.status(401); });"]}}]
+        }
+      ]
+    },
+    {
+      "name": "05 - Audit",
+      "item": [
+        {
+          "name": "GET /audit/:orderId - transition order history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auditBaseUrl}}/audit/{{transitionOrderId}}", "host": ["{{auditBaseUrl}}"], "path": ["audit", "{{transitionOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('historial ordenado y completo', function () { pm.expect(Array.isArray(body)).to.eql(true); pm.expect(body.length).to.be.at.least(5); pm.expect(body[0].toStatus).to.eql('PENDING'); pm.expect(body[body.length - 1].toStatus).to.eql('DELIVERED'); });"]}}]
+        },
+        {
+          "name": "GET /audit/:orderId - cancelled order history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auditBaseUrl}}/audit/{{cancelOrderId}}", "host": ["{{auditBaseUrl}}"], "path": ["audit", "{{cancelOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('incluye cancelacion', function () { pm.expect(body.some(entry => entry.toStatus === 'CANCELLED')).to.eql(true); });"]}}]
+        },
+        {
+          "name": "GET /audit/:orderId - failed order history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auditBaseUrl}}/audit/{{failedOrderId}}", "host": ["{{auditBaseUrl}}"], "path": ["audit", "{{failedOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('incluye fallo', function () { pm.expect(body.some(entry => entry.toStatus === 'FAILED')).to.eql(true); });"]}}]
+        },
+        {
+          "name": "GET /audit/:orderId - non existing order returns empty array",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auditBaseUrl}}/audit/{{missingOrderId}}", "host": ["{{auditBaseUrl}}"], "path": ["audit", "{{missingOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });","const body = pm.response.json();","pm.test('retorna array vacio para orden inexistente', function () { pm.expect(Array.isArray(body)).to.eql(true); pm.expect(body.length).to.eql(0); });"]}}]
+        },
+        {
+          "name": "GET /audit/:orderId - endpoint publico sin API key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{auditBaseUrl}}/audit/{{createdOrderId}}", "host": ["{{auditBaseUrl}}"], "path": ["audit", "{{createdOrderId}}"] }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('status 200', function () { pm.response.to.have.status(200); });"]}}]
+        }
+      ]
+    }
+  ]
+}

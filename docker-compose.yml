@@ -1,0 +1,87 @@
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: orders-postgres
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app-network
+
+  mongo:
+    image: mongo:6
+    container_name: audit-mongo
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app-network
+
+  orders-service:
+    build:
+      context: ./services/orders
+      target: production
+    container_name: orders-service
+    ports:
+      - '3000:3000'
+    environment:
+      PORT: 3000
+      API_KEY: ${API_KEY:-local-dev-key}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: orders_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      AUDIT_HOST: audit-service
+      AUDIT_TCP_PORT: 4001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  audit-service:
+    build:
+      context: ./services/audit
+      target: production
+    container_name: audit-service
+    ports:
+      - '3001:3001'
+      - '4001:4001'
+    environment:
+      HTTP_PORT: 3001
+      AUDIT_TCP_PORT: 4001
+      MONGODB_URI: mongodb://mongo:27017/audit_db
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
