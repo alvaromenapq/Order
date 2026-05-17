@@ -174,13 +174,6 @@ cd services/audit && npm test
 ├── docker-compose.yml
 ├── .env.example
 ├── README.md
-├── docs/
-│   ├── architecture/
-│   │   ├── decisions/          # ADR-001, ADR-002, ADR-003
-│   │   ├── contracts/          # OpenAPI + AsyncAPI
-│   │   └── diagrams/           # C4 context + container
-│   ├── specs/                  # Brief, spec, gaps
-│   └── testing/                # Estrategia de testing
 └── services/
     ├── orders/                 # MS Ordenes (NestJS + PostgreSQL)
     │   └── src/
